@@ -42,8 +42,12 @@ export default {
             label: "Send to Readwise",
             callback: () => checkSettings()
         });
+        window.roamAlphaAPI.ui.blockContextMenu.addCommand({
+            label: "Send to Readwise",
+            callback: (e) => checkSettings(e),
+        });
 
-        async function checkSettings() {
+        async function checkSettings(e) {
             var key, title, category, tagHandling;
             breakme: {
                 if (!extensionAPI.settings.get("readwise-readwiseToken")) {
@@ -57,14 +61,13 @@ export default {
 
                     if (!extensionAPI.settings.get("readwise-title")) {
                         title = "Notes from Roam Research";
-                        console.log("title set to default");
                     } else {
                         title = extensionAPI.settings.get("readwise");
                     }
                     if (!extensionAPI.settings.get("readwise-category")) {
                         category = "books";
                     } else {
-                        const regex = /^books|articles|tweets}|podcasts$/;
+                        const regex = /^books|articles|tweets|podcasts$/;
                         if (extensionAPI.settings.get("readwise-category").match(regex)) {
                             category = extensionAPI.settings.get("readwise-category");
                         } else {
@@ -87,68 +90,96 @@ export default {
                     }
 
                     const createReadwiseHighlightLink = extensionAPI.settings.get("readwise-createReadwiseHighlightLink");
-                    const startBlock = await window.roamAlphaAPI.ui.getFocusedBlock()?.["block-uid"];
-                    const token = "Token " + readwiseToken;
-                    const dbname = window.location.href.split('/')[5];
-                    const roamuri = "https://roamresearch.com/#/app/" + dbname + "/page/" + startBlock;
 
-                    var block = await window.roamAlphaAPI.data.pull("[:block/string]", [":block/uid", startBlock]);
-                    var text = "";
-                    var note = "";
-                    var highlight = "";
-
-                    if (block[":block/string"].length > 0) {
-                        text = block[":block/string"];
-                        const regex = /#([a-zA-Z_]+)|#\[\[([a-zA-Z_\W]+)\]\]/mg;
-                        var subst;
-                        if (tagHandling == "replace") {
-                            subst = `$1 $2`;
-                        } else if (tagHandling == "remove") {
-                            subst = ` `;
+                    let uidArray = [];
+                    let uids = await roamAlphaAPI.ui.individualMultiselect.getSelectedUids(); // get multi-selection uids
+                    const regex = /\[Readwise highlight\]\(https:\/\/readwise.io\/bookreview\/\d+\)/m;
+                    const substa = ``;
+                    if (uids.length === 0) { // not using multiselect mode
+                        var uid, text;
+                        if (e) { // bullet right-click 
+                            uid = e["block-uid"].toString();
+                            text = e["block-string"].toString();
+                        } else { // command palette
+                            uid = await window.roamAlphaAPI.ui.getFocusedBlock()?.["block-uid"];
+                            var texta = await window.roamAlphaAPI.data.pull("[:block/string]", [":block/uid", uid]);
+                            text = texta[":block/string"];
                         }
-                        var replacedText = text.replace(regex, subst);
-                        replacedText = replacedText.replaceAll("  ", " ")
-
-                        let m;
-                        if ((m = regex.exec(text)) !== null) {
-                            if (m.index === regex.lastIndex) {
-                                regex.lastIndex++;
-                            }
-
-                            if (m[2] == null) {
-                                note += " ." + m[1].replaceAll(" ", "_");
-                            } else if (m[1] == null) {
-                                note += " ." + m[2].replaceAll(" ", "_");
-                            }
-
-                            highlight = JSON.stringify({
-                                'highlights': [
-                                    {
-                                        'text': replacedText,
-                                        'title': title,
-                                        'source_type': source,
-                                        'category': category,
-                                        'highlight_url': roamuri,
-                                        'note': note,
-                                        'image_url': icon_url
-                                    }
-                                ]
-                            });
+                        if (text != "") { //there's text in this single block
+                            text = text.replace(regex, substa);
+                            uidArray.push({ uid, text })
                         } else {
-                            highlight = JSON.stringify({
-                                'highlights': [
-                                    {
-                                        'text': replacedText,
-                                        'title': title,
-                                        'source_type': source,
-                                        'category': category,
-                                        'highlight_url': roamuri,
-                                        'image_url': icon_url
-                                    }
-                                ]
-                            });
+                            alert("You can't send an empty block to Readwise!")
+                            return;
                         }
+                    } else { // multi-select mode, iterate blocks
+                        for (var i = 0; i < uids.length; i++) {
+                            var results = await window.roamAlphaAPI.data.pull("[:block/string]", [":block/uid", uids[i]]);
+                            var text = results[":block/string"];
+                            if (text != "") { //there's text in this single block
+                                let uid = uids[i].toString();
+                                text = text.replace(regex, substa);
+                                uidArray.push({ uid, text })
+                            }
+                        }
+                    }
 
+                    if (uidArray.length > 0) { // there are blocks to send to Readwise
+                        const token = "Token " + readwiseToken;
+                        const dbname = window.location.href.split('/')[5];
+                        var text = "";
+                        var note = "";
+                        let highlights = [];
+
+                        for (var j = 0; j < uidArray.length; j++) { // iterate and move block array to new date
+                            const roamuri = "https://roamresearch.com/#/app/" + dbname + "/page/" + uidArray[j].uid;
+                            const regex = /#([a-zA-Z_]+)|#\[\[([a-zA-Z_\W]+)\]\]/mg;
+                            var subst;
+                            if (tagHandling == "replace") {
+                                subst = `$1 $2`;
+                            } else if (tagHandling == "remove") {
+                                subst = ` `;
+                            }
+                            var replacedText = uidArray[j].text.replace(regex, subst);
+                            replacedText = replacedText.replaceAll("  ", " ");
+
+                            let m;
+                            if ((m = regex.exec(text)) !== null) {
+                                if (m.index === regex.lastIndex) {
+                                    regex.lastIndex++;
+                                }
+
+                                if (m[2] == null) {
+                                    note += " ." + m[1].replaceAll(" ", "_");
+                                } else if (m[1] == null) {
+                                    note += " ." + m[2].replaceAll(" ", "_");
+                                }
+
+                                highlights.push({
+                                    'text': replacedText,
+                                    'title': title,
+                                    'source_type': source,
+                                    'category': category,
+                                    'highlight_url': roamuri,
+                                    'note': note,
+                                    'image_url': icon_url
+                                });
+                            } else {
+                                highlights.push({
+                                    'text': replacedText,
+                                    'title': title,
+                                    'source_type': source,
+                                    'category': category,
+                                    'highlight_url': roamuri,
+                                    'image_url': icon_url
+                                });
+                            }
+
+                        }
+                        let highlight = JSON.stringify({
+                            'highlights': highlights
+                        });
+                        
                         var myHeaders = new Headers();
                         myHeaders.append("Content-Type", "application/json");
                         myHeaders.append("Authorization", "" + token + "");
@@ -165,20 +196,49 @@ export default {
                             .then(function (data) {
                                 if (createReadwiseHighlightLink == true) {
                                     let highlight_url = data[0].highlights_url;
-                                    var newString = text + ' [Readwise highlight](' + highlight_url + ')';
-                                    window.roamAlphaAPI.updateBlock(
-                                        { block: { uid: startBlock, string: newString.toString(), open: true } });
-                                }
+                                    for (var i = 0; i < uidArray.length; i++) { // iterate and add link
+                                        var newString = uidArray[i].text + ' [Readwise highlight](' + highlight_url + ')';
+                                        window.roamAlphaAPI.updateBlock(
+                                            { block: { uid: uidArray[i].uid, string: newString.toString(), open: true } });
+                                    }
+                                    }
                             })
                             .catch(function (error) {
                                 console.error(error);
                                 alert("Sending to Readwise failed!");
                             })
-                    } else {
-                        console.error("Can't send empty block to Readwise");
-                        alert("You can\'t send an empty string to Readwise");
-                        return false;
+
+                        if (uids.length !== 0) { // was using multiselect mode, so turn it off
+                            window.dispatchEvent(new KeyboardEvent('keydown', {
+                                key: "m",
+                                keyCode: 77,
+                                code: "KeyM",
+                                which: 77,
+                                shiftKey: false,
+                                ctrlKey: true,
+                                metaKey: false
+                            }));
+                            window.dispatchEvent(new KeyboardEvent('keyup', {
+                                key: "m",
+                                keyCode: 77,
+                                code: "KeyM",
+                                which: 77,
+                                shiftKey: false,
+                                ctrlKey: true,
+                                metaKey: false
+                            }));
+                        }
                     }
+                    ///////////////////
+
+
+
+
+
+
+
+
+
                 }
             }
         };
@@ -186,6 +246,9 @@ export default {
     onunload: () => {
         window.roamAlphaAPI.ui.commandPalette.removeCommand({
             label: 'Send to Readwise'
+        });
+        window.roamAlphaAPI.ui.blockContextMenu.removeCommand({
+            label: "Send to Readwise"
         });
     }
 }
