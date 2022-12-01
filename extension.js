@@ -31,6 +31,12 @@ const config = {
             description: "Set true to create a link to your highlights in Readwise at the end of the block in Roam",
             action: { type: "switch" },
         },
+        {
+            id: "readwise-createRoamHighlightLink",
+            name: "Create Link back to Roam Research",
+            description: "Set true to create a link back to the block in Roam within the highlight at Readwise",
+            action: { type: "switch" },
+        },
     ]
 };
 
@@ -90,6 +96,7 @@ export default {
                     }
 
                     const createReadwiseHighlightLink = extensionAPI.settings.get("readwise-createReadwiseHighlightLink");
+                    const createRoamHighlightLink = extensionAPI.settings.get("readwise-createRoamHighlightLink");
 
                     let uidArray = [];
                     let uids = await roamAlphaAPI.ui.individualMultiselect.getSelectedUids(); // get multi-selection uids
@@ -131,7 +138,7 @@ export default {
                         var note = "";
                         let highlights = [];
 
-                        for (var j = 0; j < uidArray.length; j++) { // iterate and move block array to new date
+                        for (var j = 0; j < uidArray.length; j++) { // iterate and create highlights for each block
                             const roamuri = "https://roamresearch.com/#/app/" + dbname + "/page/" + uidArray[j].uid;
                             const regex = /#([a-zA-Z_]+)|#\[\[([a-zA-Z_\W]+)\]\]/mg;
                             var subst;
@@ -142,6 +149,9 @@ export default {
                             }
                             var replacedText = uidArray[j].text.replace(regex, subst);
                             replacedText = replacedText.replaceAll("  ", " ");
+                            if (createRoamHighlightLink) {
+                                replacedText += " [View at Roam Research]("+roamuri+")";
+                            }
 
                             let m;
                             if ((m = regex.exec(text)) !== null) {
@@ -174,7 +184,6 @@ export default {
                                     'image_url': icon_url
                                 });
                             }
-
                         }
                         let highlight = JSON.stringify({
                             'highlights': highlights
