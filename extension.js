@@ -44,7 +44,7 @@ export default {
     onload: ({ extensionAPI }) => {
         extensionAPI.settings.panel.create(config);
 
-        window.roamAlphaAPI.ui.commandPalette.addCommand({
+        extensionAPI.ui.commandPalette.addCommand({
             label: "Send to Readwise",
             callback: () => checkSettings()
         });
@@ -190,7 +190,7 @@ export default {
                         });
                         
                         var myHeaders = new Headers();
-                        myHeaders.append("Content-Type", "application/json");
+                        myHeaders.append("Content-Type", "application/json; charset=utf-8");
                         myHeaders.append("Authorization", "" + token + "");
 
                         var requestOptions = {
@@ -238,24 +238,11 @@ export default {
                             }));
                         }
                     }
-                    ///////////////////
-
-
-
-
-
-
-
-
-
                 }
             }
         };
     },
     onunload: () => {
-        window.roamAlphaAPI.ui.commandPalette.removeCommand({
-            label: 'Send to Readwise'
-        });
         window.roamAlphaAPI.ui.blockContextMenu.removeCommand({
             label: "Send to Readwise"
         });
